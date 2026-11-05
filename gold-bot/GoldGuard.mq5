@@ -11,6 +11,8 @@
 
 #include <Trade/Trade.mqh>
 
+enum ENUM_LOT_MODE { LOT_RISK_PERCENT = 0, LOT_LADDER = 1 };
+
 //--- General
 input group "=== General ==="
 input long   InpMagic            = 20260501;   // Magic number
@@ -46,7 +48,11 @@ input double InpTrailAtrMult     = 1.2;        // Distancia trailing = ATR x est
 
 //--- Riesgo
 input group "=== Riesgo ==="
-input double InpRiskPercent      = 0.5;        // % de equity arriesgado por operacion
+input ENUM_LOT_MODE InpLotMode   = LOT_LADDER; // Modo de lote: escalera o % de riesgo
+input double InpLadderStepUSD    = 10.0;       // [Escalera] USD de equity por cada escalon
+input double InpLadderLot        = 0.01;       // [Escalera] lotes por escalon (0.01 por cada 10 USD)
+input double InpLadderMaxRiskPct = 60.0;       // [Escalera] no entrar si el SL pierde > X % de la cuenta
+input double InpRiskPercent      = 0.5;        // [% riesgo] % de equity arriesgado por operacion
 input double InpMaxLots          = 1.0;        // Lote maximo absoluto
 input double InpMaxRiskOverrun   = 1.5;        // Si el lote minimo arriesga > X veces lo planeado, no operar
 input int    InpMaxPositions     = 1;          // Posiciones abiertas maximas
@@ -286,6 +292,18 @@ double CalcLots(const double slDist)
    double maxL = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_MAX);
    if(step <= 0) return(0);
 
+   if(InpLotMode == LOT_LADDER)
+   {
+      // Escalera: InpLadderLot por cada InpLadderStepUSD de equity (minimo 1 escalon)
+      double eq = AccountInfoDouble(ACCOUNT_EQUITY);
+      double steps = MathMax(1.0, MathFloor(eq / InpLadderStepUSD));
+      double l = MathMax(minL, MathFloor(steps * InpLadderLot / step) * step);
+      l = MathMin(l, MathMin(maxL, InpMaxLots));
+      // tope de seguridad: no entrar si el SL perderia demasiado % de la cuenta
+      if(l * lossPerLot > eq * InpLadderMaxRiskPct / 100.0) return(0);
+      return(NormalizeDouble(l, LotDigits(step)));
+   }
+
    double lots = MathFloor(riskMoney / lossPerLot / step) * step;
    if(lots < minL)
    {
@@ -398,7 +416,8 @@ void OpenTrade(const int dir, const double atr)
    double margin = 0;
    ENUM_ORDER_TYPE ot = (dir > 0) ? ORDER_TYPE_BUY : ORDER_TYPE_SELL;
    if(!OrderCalcMargin(ot, _Symbol, lots, price, margin)) return;
-   if(AccountInfoDouble(ACCOUNT_MARGIN_FREE) < margin * InpMinFreeMarginX)
+   double needX = (InpLotMode == LOT_LADDER) ? MathMin(InpMinFreeMarginX, 1.1) : InpMinFreeMarginX;
+   if(AccountInfoDouble(ACCOUNT_MARGIN_FREE) < margin * needX)
       { g_status = "Margen libre insuficiente"; return; }
 
    bool ok = (dir > 0) ? g_trade.Buy(lots, _Symbol, price, sl, tp, InpComment)

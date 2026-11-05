@@ -87,3 +87,18 @@ o eventos puntuales, añade ventanas en `InpNoTradeWindows`, ej: `15:25-15:50;20
 - Con cuenta pequeña (< ~$500) el lote mínimo (0.01) puede arriesgar más de lo planeado; el bot lo detecta y no opera. Ajusta con cuidado.
 - Revisa que tu cuenta FxPro sea de tipo MT5 (no cTrader); funciona en *netting* y *hedging*.
 - Reactivar tras bloqueo por drawdown: pon `InpResetHalt = true`, reinicia el EA, y vuelve a `false`.
+
+## Modo escalera (cuentas muy pequeñas, ej. 10 USD)
+
+`InpLotMode = LOT_LADDER` (por defecto): **0.01 lotes por cada 10 USD de equity**
+(`InpLadderStepUSD`, `InpLadderLot`). Con 10–19 USD opera 0.01; con 20 USD, 0.02; etc.
+Sube al ganar y baja al perder. Para volver al cálculo por % de riesgo usa `LOT_RISK_PERCENT`.
+
+Con 10 USD, un SL típico de oro (~3–5 USD con 0.01 lote) es ~30–50 % de la cuenta:
+
+- `InpLadderMaxRiskPct` (60 %) impide entrar si el SL perdería más que eso; tras una pérdida
+  grande el bot dejará de operar hasta que el saldo se recupere.
+- Los límites de pérdida diaria (2 %) y drawdown (8 %) se disparan con **una sola** pérdida.
+  Con 10 USD súbelos (p. ej. diaria 50 %, drawdown 70 %) si quieres que siga operando,
+  sabiendo que arriesgas la cuenta entera.
+- Pide al broker margen suficiente: con poco apalancamiento, 0.01 lote de oro puede no caber en 10 USD.
